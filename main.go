@@ -1,12 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
-	"sync"
+	"text/template"
 )
 
 type Note struct {
@@ -15,64 +13,65 @@ type Note struct {
 	Text    string `json:"text"`
 }
 
-func getCreateNote(w http.ResponseWriter, r *http.Request) {
-	defer mutex.Unlock()
-	mutex.Lock()
-	decoder := json.NewDecoder(r.Body)
-	var note Note
-	err := decoder.Decode(&note)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	notes = append(notes, note)
-	log.Println("Name: " + note.Name + "\nSurname: " + note.Surname + "\nText:" + note.Text)
-	fmt.Fprintf(w, "Name: "+note.Name+"\nSurname: "+note.Surname+"\nText:"+note.Text)
-
-}
-
-/*
-func getHelloPage(w http.ResponseWriter, r *http.Request) {
-	name := r.URL.Query().Get("name")
-	fmt.Fprintf(w, "Hello, "+name)
-}
-*/
-
-func getReadNote(w http.ResponseWriter, r *http.Request) {
-	defer mutex.Unlock()
-	mutex.Lock()
-	txt := r.URL.Query().Get("id")
-	NoteID, err := strconv.ParseInt(txt, 10, 64)
-	if err == nil {
-		NoteID -= 1
-		if NoteID >= 0 && NoteID < int64(len(notes)) {
-			note := notes[NoteID]
-			jsonValue, _ := json.Marshal(note)
-			fmt.Fprintf(w, string(jsonValue))
-		}
-
-	}
-	fmt.Fprintf(w, "err")
-}
-
-func getNotesCount(w http.ResponseWriter, r *http.Request) {
-	defer mutex.Unlock()
-	mutex.Lock()
-	l := strconv.Itoa(len(notes))
-	fmt.Fprintf(w, l)
-}
-
-var notes []Note
-var mutex sync.Mutex
+var Notes = []Note{}
 
 func main() {
-	//http.HandleFunc("/hello", getHelloPage)
-	http.HandleFunc("/createNote", getCreateNote)
-	http.HandleFunc("/getNoteCount", getNotesCount)
-	http.HandleFunc("/readNote", getReadNote)
-	err := http.ListenAndServe(":4862", nil)
+	//json.Marshal()
+	http.HandleFunc("/", mainPage)
+	http.HandleFunc("/notes", notesPage)
+	http.HandleFunc("/create_notes", saveNotePage)
+
+	err := http.ListenAndServe(":3000", nil)
+	fmt.Println("Server is starting on port 3000")
+	if err != nil {
+		log.Fatal("ListenAndServer", err)
+	}
+}
+
+func mainPage(w http.ResponseWriter, req *http.Request) {
+	tmpl, err := template.ParseFiles("static/index.html")
 
 	if err != nil {
-		log.Fatal("ListenAndServe: ", err)
+		http.Error(w, err.Error(), 400)
+		return
 	}
+	if err := tmpl.Execute(w, nil); err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+}
+
+func notesPage(w http.ResponseWriter, req *http.Request) {
+	//notes := []Note{Note{"NAME", "SURNAME", "TEXT"}, Note{"NAME2", "SURNAME2", "TEXT2"}}
+	//js, _ := json.Marshal(note)
+	tmpl, err := template.ParseFiles("static/notes.html")
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+	}
+
+	if err := tmpl.Execute(w, Notes); err != nil {
+		http.Error(w, err.Error(), 400)
+	}
+
+}
+
+func saveNotePage(w http.ResponseWriter, req *http.Request) {
+	tmpl, err := template.ParseFiles("static/create.html")
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+
+	name := req.FormValue("name")
+	surname := req.FormValue("surname")
+	text := req.FormValue("text")
+	if name != "" && surname != "" && text != "" {
+		Notes = append(Notes, Note{name, surname, text})
+	}
+	if err := tmpl.Execute(w, Notes); err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	fmt.Println("FROM CREATE", name, surname, text)
+
 }
